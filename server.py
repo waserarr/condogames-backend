@@ -1,19 +1,21 @@
 import os
-from flask import Flask, request, jsonify, redirect, session, url_for
+import time
+from flask import Flask, request, jsonify, redirect, session
 from functools import wraps
-from roblox_uploader import upload_condo_game  # Your uploader function
+from roblox_uploader import upload_condo_game
 import secrets
 import requests
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(16))
 
-# Replace with your actual Discord OAuth2 credentials from Discord dev portal
 DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET")
-DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI")  # eg: https://yourdomain.com/callback
+DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI")
 
-# Your fixed 30 condo request keys
+UPLOAD_COOLDOWN = 180  # 3 minutes in seconds
+cooldown_tracker = {}  # Stores user_id -> last_upload_time
+
 VALID_KEYS = {
     "key1-abc123", "key2-def456", "key3-ghi789", "key4-jkl012", "key5-mno345",
     "key6-pqr678", "key7-stu901", "key8-vwx234", "key9-yza567", "key10-bcd890",
@@ -23,12 +25,12 @@ VALID_KEYS = {
     "key26-xyz678", "key27-abc901", "key28-def234", "key29-ghi567", "key30-jkl890",
 }
 
-# Decorator to require Discord login
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'discord_token' not in session:
-            return jsonify({"error": "Unauthorized, login required"}), 401
+            return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -55,7 +57,7 @@ def login():
 def callback():
     code = request.args.get('code')
     if not code:
-        return "No code provided", 400
+        return "Missing code", 400
 
     data = {
         "client_id": DISCORD_CLIENT_ID,
@@ -63,16 +65,14 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": DISCORD_REDIRECT_URI,
-        "scope": "identify",
+        "scope": "identify"
     }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
     r.raise_for_status()
     tokens = r.json()
     session['discord_token'] = tokens['access_token']
 
-    # Optionally get user info:
     user_req = requests.get(
         "https://discord.com/api/users/@me",
         headers={"Authorization": f"Bearer {tokens['access_token']}"}
@@ -93,12 +93,18 @@ def logout():
 @app.route("/upload-condo", methods=["POST"])
 @login_required
 def upload_condo():
-    # Validate condo request key
     key = request.form.get("key")
     if not key or key not in VALID_KEYS:
-        return jsonify({"error": "Invalid or missing key"}), 400
+        return jsonify({"error": "Invalid key"}), 400
 
-    # Read local game.rbxl file (make sure this file exists in your backend folder)
+    user_id = session['discord_user']['id']
+    now = time.time()
+    last_used = cooldown_tracker.get(user_id, 0)
+
+    if now - last_used < UPLOAD_COOLDOWN:
+        seconds_left = int(UPLOAD_COOLDOWN - (now - last_used))
+        return jsonify({"error": f"Cooldown active. Try again in {seconds_left} seconds."}), 429
+
     game_file_path = os.path.join(os.path.dirname(__file__), "game.rbxl")
     if not os.path.isfile(game_file_path):
         return jsonify({"error": "Game file not found"}), 500
@@ -106,17 +112,15 @@ def upload_condo():
     with open(game_file_path, "rb") as f:
         game_bytes = f.read()
 
-    # Use your uploader function (make sure roblox_uploader.upload_condo_game accepts bytes)
     try:
         universe_id = upload_condo_game(game_bytes)
     except Exception as e:
-        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
 
-    # Return Roblox game URL
-    game_url = f"https://www.roblox.com/games/{universe_id}/Uploaded-Condo-Game"
+    cooldown_tracker[user_id] = now
+    game_url = f"https://www.roblox.com/games/{universe_id}/Uploaded-Condo"
     return jsonify({"success": True, "url": game_url})
 
 
 if __name__ == "__main__":
-    # Use port 5000 for local testing
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
