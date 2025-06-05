@@ -1,1 +1,94 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Condo Uploader</title>
+  <style>
+    body {
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: auto;
+      background: #1c1c1c;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 5px;
+      background: #2e2e2e;
+      color: white;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: crimson;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: 0.3s ease;
+    }
+
+    button:hover {
+      background: darkred;
+    }
+
+    .result {
+      margin-top: 1rem;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Upload a Condo</h2>
+    <p>Enter your condo request key below.</p>
+    <input type="text" id="key" placeholder="Enter your key here">
+    <button onclick="uploadCondo()">Upload</button>
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    async function uploadCondo() {
+      const key = document.getElementById('key').value;
+      const result = document.getElementById('result');
+      result.textContent = "Uploading...";
+
+      try {
+        const res = await fetch('/upload-condo', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({ key })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          result.innerHTML = `<span style="color:lightgreen">✅ Game uploaded:</span><br><a href="${data.url}" target="_blank">${data.url}</a>`;
+        } else {
+          result.innerHTML = `<span style="color:crimson">❌ ${data.error}</span>`;
+        }
+      } catch (err) {
+        result.innerHTML = `<span style="color:crimson">❌ Upload failed. Try again later.</span>`;
+      }
+    }
+  </script>
+</body>
+</html>
