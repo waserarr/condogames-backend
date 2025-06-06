@@ -2,10 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CondoGames.Net - Condo Requestor</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: #fff;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    header, footer {
+      background: #b63131;
+      color: white;
+      padding: 15px 0;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    header .logo a,
+    nav ul li a {
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    nav ul {
+      list-style: none;
+      padding-left: 0;
+      display: flex;
+      gap: 20px;
+      margin: 10px 0 0 0;
+    }
+    nav ul li a.active {
+      text-decoration: underline;
+    }
+    button.btn {
+      background: #b63131;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    button.btn:hover {
+      background: #8b2424;
+    }
+    main h1 {
+      margin-bottom: 10px;
+    }
+    input[type="text"] {
+      padding: 10px;
+      font-size: 1rem;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: 600;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -18,27 +84,44 @@
           <li><a href="/">Home</a></li>
           <li><a href="/faq">FAQ</a></li>
           <li><a class="active" href="/condorequestor">Condo Requestor</a></li>
-          <li><a href="https://discord.gg/rblxcondo" target="_blank" class="discord-link">Discord</a></li>
+          <li>
+            <a href="https://discord.gg/rblxcondo" target="_blank" class="discord-link"
+              >Discord</a
+            >
+          </li>
         </ul>
       </nav>
     </div>
   </header>
 
-  <main class="container" style="padding: 80px 20px; max-width: 700px;">
+  <main class="container" style="padding: 80px 20px;">
     <h1>Request a Condo Upload</h1>
-    <p>Enter your access key below to upload the default condo game. You must be logged in with Discord.</p>
+    <p>
+      Enter your access key below to upload the default condo game. You must be
+      logged in with Discord.
+    </p>
 
-    <div id="auth-section" style="margin: 20px 0;"></div>
+    <div id="auth-section" style="margin: 20px 0;">
+      <p>❌ You must be logged in with Discord.</p>
+      <button id="login-btn" class="btn">Login with Discord</button>
+    </div>
 
     <form id="upload-form" style="display: none; margin-top: 30px;">
-      <label for="access-key" style="font-weight: 600;">Access Key:</label><br>
-      <input type="text" id="access-key" name="key" required placeholder="Enter your access key"
-        style="margin-top: 10px; margin-bottom: 20px; width: 100%; padding: 8px; font-size: 1rem;">
-
-      <button type="submit" class="btn" style="width: 100%; font-size: 1.2rem;">Request Upload</button>
+      <label for="access-key" style="font-weight: 600;">Access Key:</label><br />
+      <input
+        type="text"
+        id="access-key"
+        name="key"
+        required
+        placeholder="Enter your access key"
+        style="margin-top: 10px; margin-bottom: 20px"
+      />
+      <button type="submit" class="btn" style="width: 100%; font-size: 1.2rem;">
+        Request Upload
+      </button>
     </form>
 
-    <div id="status" style="margin-top: 20px; font-weight: 600;"></div>
+    <div id="status"></div>
   </main>
 
   <footer>
@@ -48,64 +131,84 @@
   </footer>
 
   <script>
-    const backendUrl = "https://condogames-backend.onrender.com"; 
+    const backendUrl = "https://condogames-backend.onrender.com";
 
     async function checkAuth() {
       try {
-        const res = await fetch(`${backendUrl}/@me`, { credentials: "include" });
+        const res = await fetch(`${backendUrl}/@me`, {
+          credentials: "include",
+        });
         if (res.ok) {
           const user = await res.json();
-          document.getElementById('auth-section').innerHTML = `
+          document.getElementById("auth-section").innerHTML = `
             <p>✅ Logged in as <b>${user.username}#${user.discriminator}</b></p>
-            <a href="${backendUrl}/logout"><button class="btn">Logout</button></a>
+            <button id="logout-btn" class="btn">Logout</button>
           `;
-          document.getElementById('upload-form').style.display = 'block';
+          document.getElementById("upload-form").style.display = "block";
+
+          document
+            .getElementById("logout-btn")
+            .addEventListener("click", async () => {
+              await fetch(`${backendUrl}/logout`, {
+                credentials: "include",
+              });
+              window.location.reload();
+            });
         } else {
-          throw new Error();
+          throw new Error("Not authenticated");
         }
       } catch {
-        document.getElementById('auth-section').innerHTML = `
+        document.getElementById("auth-section").innerHTML = `
           <p>❌ You must be logged in with Discord.</p>
-          <a href="${backendUrl}/login"><button class="btn">Login with Discord</button></a>
+          <button id="login-btn" class="btn">Login with Discord</button>
         `;
-        document.getElementById('upload-form').style.display = 'none';
+        document.getElementById("upload-form").style.display = "none";
+        document
+          .getElementById("login-btn")
+          .addEventListener("click", () => {
+            window.location.href = `${backendUrl}/login`;
+          });
       }
     }
 
-    document.getElementById('upload-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const key = document.getElementById('access-key').value.trim();
-      const status = document.getElementById('status');
-      if (!key) return (status.textContent = "Please enter a key.");
-
-      status.textContent = "Uploading...";
-
-      try {
-        const res = await fetch(`${backendUrl}/upload-condo`, {
-          method: "POST",
-          credentials: "include",
-          body: new URLSearchParams({ key }),
-        });
-
-        const result = await res.json();
-
-        if (res.ok && result.success) {
-          status.style.color = "green";
-          status.textContent = "✅ Upload successful! Redirecting...";
-          setTimeout(() => {
-            window.location.href = result.url;
-          }, 1500);
-        } else {
+    document
+      .getElementById("upload-form")
+      .addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const key = document.getElementById("access-key").value.trim();
+        const status = document.getElementById("status");
+        if (!key) {
           status.style.color = "red";
-          status.textContent = `❌ ${result.error || "Upload failed."}`;
+          return (status.textContent = "Please enter a key.");
         }
-      } catch (err) {
-        status.style.color = "red";
-        status.textContent = "❌ Server error.";
-      }
-    });
+        status.style.color = "black";
+        status.textContent = "Uploading...";
 
+        try {
+          const res = await fetch(`${backendUrl}/upload-condo`, {
+            method: "POST",
+            credentials: "include",
+            body: new URLSearchParams({ key }),
+          });
+          const result = await res.json();
+
+          if (res.ok && result.success) {
+            status.style.color = "green";
+            status.textContent = "✅ Upload successful! Redirecting...";
+            setTimeout(() => {
+              window.location.href = result.url;
+            }, 1500);
+          } else {
+            status.style.color = "red";
+            status.textContent = `❌ ${result.error || "Upload failed."}`;
+          }
+        } catch (err) {
+          status.style.color = "red";
+          status.textContent = "❌ Server error.";
+        }
+      });
+
+    // Initial check on page load
     checkAuth();
   </script>
 </body>
