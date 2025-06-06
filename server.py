@@ -1,7 +1,7 @@
 import os
 from flask import Flask, request, jsonify, redirect, session
 from functools import wraps
-from roblox_uploader import upload_condo_game
+from roblox_uploader import upload_condo_game  # Make sure this accepts `map_file_path`
 import secrets
 import requests
 import asyncio
@@ -87,15 +87,28 @@ def logout():
     return redirect("/")
 
 
+@app.route("/@me")
+def get_user():
+    if 'discord_user' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+    return jsonify(session['discord_user'])
+
+
 @app.route("/upload-condo", methods=["POST"])
 @login_required
 def upload_condo():
     key = request.form.get("key")
+    map_file = request.form.get("map", "game1.rbxl")  # default to game1.rbxl
+
     if not key or key not in VALID_KEYS:
         return jsonify({"error": "Invalid or missing key"}), 400
 
+    map_path = os.path.join("games", map_file)
+    if not os.path.exists(map_path):
+        return jsonify({"error": "Selected map does not exist."}), 400
+
     try:
-        universe_id = asyncio.run(upload_condo_game())
+        universe_id = asyncio.run(upload_condo_game(map_path))
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
