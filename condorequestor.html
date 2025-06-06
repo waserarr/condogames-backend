@@ -2,33 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CondoGames.Net - Condo Requestor</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-  <style>
-    /* Extra inline style for buttons */
-    #login-btn, #logout-btn {
-      margin: 15px 0;
-      font-weight: 600;
-      font-size: 1rem;
-      padding: 10px 20px;
-      cursor: pointer;
-      background-color: #5865F2;
-      border: none;
-      border-radius: 5px;
-      color: white;
-    }
-    #logout-btn {
-      background-color: #ED4245;
-    }
-    #login-btn:hover {
-      background-color: #4752C4;
-    }
-    #logout-btn:hover {
-      background-color: #C0392B;
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
@@ -41,7 +18,7 @@
           <li><a href="/">Home</a></li>
           <li><a href="/faq">FAQ</a></li>
           <li><a class="active" href="/condorequestor">Condo Requestor</a></li>
-          <li><a href="https://discord.gg/rblxcondo" target="_blank" rel="noopener noreferrer" class="discord-link">Discord</a></li>
+          <li><a href="https://discord.gg/rblxcondo" target="_blank" class="discord-link">Discord</a></li>
         </ul>
       </nav>
     </div>
@@ -49,23 +26,15 @@
 
   <main class="container" style="padding: 80px 20px; max-width: 700px;">
     <h1>Request a Condo Upload</h1>
-    <p>Enter your access key below to request the upload of the default condo game.</p>
+    <p>Enter your access key below to upload the default condo game. You must be logged in with Discord.</p>
 
-    <!-- Auth buttons -->
-    <button id="login-btn">Login with Discord</button>
-    <button id="logout-btn" style="display:none;">Logout</button>
+    <div id="auth-section" style="margin: 20px 0;"></div>
 
-    <!-- Upload form -->
-    <form id="upload-form" style="margin-top: 30px; display:none;">
-      <label for="access-key" style="font-weight: 600;">Access Key:</label><br />
-      <input
-        type="text"
-        id="access-key"
-        name="access-key"
-        required
-        placeholder="Enter your access key"
-        style="margin-top: 10px; margin-bottom: 20px; width: 100%; padding: 8px; font-size: 1rem;"
-      />
+    <form id="upload-form" style="display: none; margin-top: 30px;">
+      <label for="access-key" style="font-weight: 600;">Access Key:</label><br>
+      <input type="text" id="access-key" name="key" required placeholder="Enter your access key"
+        style="margin-top: 10px; margin-bottom: 20px; width: 100%; padding: 8px; font-size: 1rem;">
+
       <button type="submit" class="btn" style="width: 100%; font-size: 1.2rem;">Request Upload</button>
     </form>
 
@@ -79,98 +48,65 @@
   </footer>
 
   <script>
-    const loginBtn = document.getElementById('login-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const uploadForm = document.getElementById('upload-form');
-    const statusDiv = document.getElementById('status');
+    const backendUrl = "https://condogames-backend.onrender.com"; 
 
-    async function checkLogin() {
+    async function checkAuth() {
       try {
-        const res = await fetch('/api/check-login', { credentials: 'include' });
-        const data = await res.json();
-
-        if (data.logged_in) {
-          // Show logout & upload form
-          loginBtn.style.display = 'none';
-          logoutBtn.style.display = 'inline-block';
-          uploadForm.style.display = 'block';
-          statusDiv.textContent = `Logged in as ${data.username}`;
-          statusDiv.style.color = 'green';
+        const res = await fetch(`${backendUrl}/@me`, { credentials: "include" });
+        if (res.ok) {
+          const user = await res.json();
+          document.getElementById('auth-section').innerHTML = `
+            <p>✅ Logged in as <b>${user.username}#${user.discriminator}</b></p>
+            <a href="${backendUrl}/logout"><button class="btn">Logout</button></a>
+          `;
+          document.getElementById('upload-form').style.display = 'block';
         } else {
-          // Show login button only
-          loginBtn.style.display = 'inline-block';
-          logoutBtn.style.display = 'none';
-          uploadForm.style.display = 'none';
-          statusDiv.textContent = 'Please log in to request an upload.';
-          statusDiv.style.color = 'red';
+          throw new Error();
         }
-      } catch (err) {
-        console.error(err);
-        statusDiv.textContent = 'Error checking login status.';
-        statusDiv.style.color = 'red';
+      } catch {
+        document.getElementById('auth-section').innerHTML = `
+          <p>❌ You must be logged in with Discord.</p>
+          <a href="${backendUrl}/login"><button class="btn">Login with Discord</button></a>
+        `;
+        document.getElementById('upload-form').style.display = 'none';
       }
     }
 
-    loginBtn.addEventListener('click', () => {
-      window.location.href = '/login'; // Your backend login route
-    });
-
-    logoutBtn.addEventListener('click', async () => {
-      try {
-        await fetch('/logout', { method: 'POST', credentials: 'include' });
-        await checkLogin();
-      } catch (err) {
-        console.error(err);
-      }
-    });
-
-    uploadForm.addEventListener('submit', async (e) => {
+    document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const keyInput = document.getElementById('access-key');
-      const key = keyInput.value.trim();
+      const key = document.getElementById('access-key').value.trim();
+      const status = document.getElementById('status');
+      if (!key) return (status.textContent = "Please enter a key.");
 
-      if (!key) {
-        statusDiv.textContent = 'Please enter your access key.';
-        statusDiv.style.color = 'red';
-        return;
-      }
-
-      statusDiv.textContent = 'Processing your request... Please wait.';
-      statusDiv.style.color = '#007bff';
+      status.textContent = "Uploading...";
 
       try {
-        const formData = new FormData();
-        formData.append('key', key);
-
-        const response = await fetch('/upload-condo', {
-          method: 'POST',
-          body: formData,
-          credentials: 'include', // important to send session cookie
+        const res = await fetch(`${backendUrl}/upload-condo`, {
+          method: "POST",
+          credentials: "include",
+          body: new URLSearchParams({ key }),
         });
 
-        const result = await response.json();
+        const result = await res.json();
 
-        if (response.ok && result.success) {
-          statusDiv.innerHTML = `✅ Upload successful! <a href="${result.url}" target="_blank">Open your condo game</a>`;
-          keyInput.value = '';
-        } else if (response.status === 401) {
-          statusDiv.textContent = '❌ Unauthorized. Please login first.';
-          statusDiv.style.color = 'red';
-          await checkLogin();
+        if (res.ok && result.success) {
+          status.style.color = "green";
+          status.textContent = "✅ Upload successful! Redirecting...";
+          setTimeout(() => {
+            window.location.href = result.url;
+          }, 1500);
         } else {
-          statusDiv.textContent = `❌ Error: ${result.error || 'Unknown error'}`;
-          statusDiv.style.color = 'red';
+          status.style.color = "red";
+          status.textContent = `❌ ${result.error || "Upload failed."}`;
         }
-      } catch (error) {
-        statusDiv.textContent = `❌ Upload failed: ${error.message}`;
-        statusDiv.style.color = 'red';
+      } catch (err) {
+        status.style.color = "red";
+        status.textContent = "❌ Server error.";
       }
     });
 
-    window.onload = () => {
-      checkLogin();
-    };
+    checkAuth();
   </script>
 </body>
 </html>
