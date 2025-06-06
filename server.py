@@ -1,10 +1,10 @@
 import os
-import time
 from flask import Flask, request, jsonify, redirect, session
 from functools import wraps
 from roblox_uploader import upload_condo_game
 import secrets
 import requests
+import asyncio
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(16))
@@ -12,9 +12,6 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(16))
 DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI")
-
-UPLOAD_COOLDOWN = 180  # 3 minutes in seconds
-cooldown_tracker = {}  # Stores user_id -> last_upload_time
 
 VALID_KEYS = {
     "key1-abc123", "key2-def456", "key3-ghi789", "key4-jkl012", "key5-mno345",
@@ -25,12 +22,11 @@ VALID_KEYS = {
     "key26-xyz678", "key27-abc901", "key28-def234", "key29-ghi567", "key30-jkl890",
 }
 
-
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'discord_token' not in session:
-            return jsonify({"error": "Unauthorized"}), 401
+            return jsonify({"error": "Unauthorized, login required"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -57,7 +53,7 @@ def login():
 def callback():
     code = request.args.get('code')
     if not code:
-        return "Missing code", 400
+        return "No code provided", 400
 
     data = {
         "client_id": DISCORD_CLIENT_ID,
@@ -65,10 +61,11 @@ def callback():
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": DISCORD_REDIRECT_URI,
-        "scope": "identify"
+        "scope": "identify",
     }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
     r.raise_for_status()
     tokens = r.json()
     session['discord_token'] = tokens['access_token']
@@ -81,7 +78,7 @@ def callback():
     user = user_req.json()
     session['discord_user'] = user
 
-    return redirect("/condorequestor.html")
+    return redirect("https://condogames.net/condorequestor.html?status=success")
 
 
 @app.route("/logout")
@@ -95,39 +92,16 @@ def logout():
 def upload_condo():
     key = request.form.get("key")
     if not key or key not in VALID_KEYS:
-        return jsonify({"error": "Invalid key"}), 400
-
-    user_id = session['discord_user']['id']
-    now = time.time()
-    last_used = cooldown_tracker.get(user_id, 0)
-
-    if now - last_used < UPLOAD_COOLDOWN:
-        seconds_left = int(UPLOAD_COOLDOWN - (now - last_used))
-        return jsonify({"error": f"Cooldown active. Try again in {seconds_left} seconds."}), 429
-
-    game_file_path = os.path.join(os.path.dirname(__file__), "game.rbxl")
-    if not os.path.isfile(game_file_path):
-        return jsonify({"error": "Game file not found"}), 500
-
-    with open(game_file_path, "rb") as f:
-        game_bytes = f.read()
+        return jsonify({"error": "Invalid or missing key"}), 400
 
     try:
-        universe_id = upload_condo_game(game_bytes)
+        universe_id = asyncio.run(upload_condo_game())
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
-    cooldown_tracker[user_id] = now
-    game_url = f"https://www.roblox.com/games/{universe_id}/Uploaded-Condo"
+    game_url = f"https://www.roblox.com/games/{universe_id}/Uploaded-Condo-Game"
     return jsonify({"success": True, "url": game_url})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
-from flask import send_from_directory
-
-@app.route('/<path:filename>')
-def static_files(filename):
-    return send_from_directory('static', filename)
-
+    app.run(host="0.0.0.0", port=5000, debug=True)
