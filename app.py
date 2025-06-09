@@ -1,9 +1,12 @@
 from flask import Flask, jsonify
-from roblox_uploader import upload_game  # this must return the game URL
+from flask_cors import CORS
+from roblox_uploader import upload_game  # must return the game URL
 import json
 import os
 
 app = Flask(__name__)
+CORS(app, origins=["https://condogames.net"], supports_credentials=True)  # <-- Add this
+
 LATEST_FILE = "latest.json"
 
 @app.route("/latest-upload", methods=["GET"])
@@ -27,7 +30,7 @@ def auto_upload():
                     with open(LATEST_FILE, "w") as f:
                         json.dump({"url": url}, f)
                     return jsonify({"success": True, "url": url})
-            except Exception as e:
+            except Exception:
                 continue
 
         return jsonify({"success": False, "error": "All uploads failed."}), 500
