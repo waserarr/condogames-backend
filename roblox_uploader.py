@@ -1,111 +1,95 @@
-import aiohttp
-import asyncio
-import os
-import random
+import requests
+import time
 
-ROBLOSECURITY_COOKIES_FILE = "cookies.txt"
-ROBLOX_API_BASE = "https://games.roblox.com"
+ROBLOX_API_BASE = "https://apis.roblox.com/universes/v1"
+UPLOAD_ENDPOINT = "https://data.roblox.com/Data/Upload.ashx"
 
-async def get_csrf_token(session):
-    url = "https://auth.roblox.com/v2/logout"
-    async with session.post(url) as resp:
-        token = resp.headers.get("x-csrf-token")
-        if not token:
+HEADERS = {
+    "User-Agent": "RobloxUploader/1.0"
+}
+
+def get_csrf_token(cookie):
+    res = requests.post("https://auth.roblox.com/v2/logout", headers={"Cookie": f".ROBLOSECURITY={cookie}"})
+    return res.headers.get("x-csrf-token", "")
+
+def create_universe(cookie, csrf, name):
+    headers = {
+        "Cookie": f".ROBLOSECURITY={cookie}",
+        "x-csrf-token": csrf,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "name": name,
+        "description": "Uploaded via CondoGames.Net",
+        "universeAvatarType": "R6"
+    }
+    res = requests.post("https://apis.roblox.com/universes/v1/universes", headers=headers, json=data)
+    if res.ok:
+        return res.json().get("universeId")
+    return None
+
+def create_place(cookie, csrf, universe_id, name):
+    headers = {
+        "Cookie": f".ROBLOSECURITY={cookie}",
+        "x-csrf-token": csrf,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "name": name,
+        "description": "Uploaded from CondoGames.Net",
+        "universeId": universe_id
+    }
+    res = requests.post("https://apis.roblox.com/universes/v1/places", headers=headers, json=data)
+    if res.ok:
+        return res.json().get("placeId")
+    return None
+
+def upload_file(cookie, csrf, place_id, file_path):
+    headers = {
+        "Cookie": f".ROBLOSECURITY={cookie}",
+        "x-csrf-token": csrf
+    }
+    with open(file_path, "rb") as f:
+        files = {
+            "request": (None, f'{{"targetPlaceId":{place_id},"versionType":"Published"}}', "application/json"),
+            "file": ("game.rbxl", f, "application/octet-stream")
+        }
+        res = requests.post(UPLOAD_ENDPOINT, headers=headers, files=files)
+    return res.ok
+
+def make_public(cookie, csrf, universe_id):
+    headers = {
+        "Cookie": f".ROBLOSECURITY={cookie}",
+        "x-csrf-token": csrf,
+        "Content-Type": "application/json"
+    }
+    data = {"isArchived": False, "isActive": True}
+    res = requests.patch(f"{ROBLOX_API_BASE}/{universe_id}/configuration", headers=headers, json=data)
+    return res.ok
+
+def upload_game(cookie, file_path="game.rbxl", place_name="Auto Condo"):
+    try:
+        csrf = get_csrf_token(cookie)
+        if not csrf:
             raise Exception("Failed to get CSRF token")
-        return token
 
-async def create_universe(session, csrf_token):
-    url = f"{ROBLOX_API_BASE}/universes/create"
-    headers = {
-        "x-csrf-token": csrf_token,
-        "Content-Type": "application/json"
-    }
-    data = {
-        "name": "Uploaded Condo Game",
-        "description": "Uploaded via API",
-        "universeAvatarType": "Player"
-    }
-    async with session.post(url, json=data, headers=headers) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            raise Exception(f"❌ Create universe failed: {text}")
-        res = await resp.json()
-        return res.get("universeId")
+        universe_id = create_universe(cookie, csrf, place_name)
+        if not universe_id:
+            raise Exception("Failed to create universe")
 
-async def create_place(session, csrf_token, universe_id):
-    url = f"{ROBLOX_API_BASE}/universes/{universe_id}/places"
-    headers = {
-        "x-csrf-token": csrf_token,
-        "Content-Type": "application/json"
-    }
-    data = {
-        "name": "Main Place",
-        "description": "Main place for game"
-    }
-    async with session.post(url, json=data, headers=headers) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            raise Exception(f"❌ Create place failed: {text}")
-        res = await resp.json()
-        return res.get("placeId")
+        place_id = create_place(cookie, csrf, universe_id, place_name)
+        if not place_id:
+            raise Exception("Failed to create place")
 
-async def upload_place_file(session, csrf_token, place_id, game_bytes):
-    url = f"https://data.roblox.com/Data/Upload.ashx?assetid={place_id}&isPlaceFile=true"
-    headers = {
-        "x-csrf-token": csrf_token,
-        "Content-Type": "application/octet-stream"
-    }
-    async with session.post(url, headers=headers, data=game_bytes) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            raise Exception(f"❌ Upload place failed: {text}")
+        uploaded = upload_file(cookie, csrf, place_id, file_path)
+        if not uploaded:
+            raise Exception("File upload failed")
 
-async def activate_universe(session, csrf_token, universe_id):
-    url = f"{ROBLOX_API_BASE}/universes/{universe_id}/configuration"
-    headers = {
-        "x-csrf-token": csrf_token,
-        "Content-Type": "application/json"
-    }
-    data = {
-        "universeId": universe_id,
-        "maxPlayers": 20,
-        "allowThirdPartySales": True,
-        "universeAvatarType": "Player"
-    }
-    async with session.post(url, json=data, headers=headers) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            raise Exception(f"❌ Activate universe failed: {text}")
+        public = make_public(cookie, csrf, universe_id)
+        if not public:
+            raise Exception("Failed to make game public")
 
-async def upload_condo_game(map_file: str) -> int:
-    if not os.path.exists(ROBLOSECURITY_COOKIES_FILE):
-        raise Exception("❌ cookies.txt not found")
-
-    with open(ROBLOSECURITY_COOKIES_FILE, "r") as f:
-        cookies = [line.strip() for line in f if line.strip()]
-    if not cookies:
-        raise Exception("❌ No .ROBLOSECURITY cookies found")
-
-    cookie = random.choice(cookies)
-
-    if not os.path.exists(map_file):
-        raise Exception(f"❌ Map file not found: {map_file}")
-
-    with open(map_file, "rb") as f:
-        game_bytes = f.read()
-
-    jar = aiohttp.CookieJar()
-    jar.update_cookies({".ROBLOSECURITY": cookie})
-
-    async with aiohttp.ClientSession(cookie_jar=jar) as session:
-        csrf_token = await get_csrf_token(session)
-        universe_id = await create_universe(session, csrf_token)
-        place_id = await create_place(session, csrf_token, universe_id)
-        await upload_place_file(session, csrf_token, place_id, game_bytes)
-        await activate_universe(session, csrf_token, universe_id)
-        return universe_id
-
-if __name__ == "__main__":
-    import sys
-    map_arg = sys.argv[1] if len(sys.argv) > 1 else "game1.rbxl"
-    asyncio.run(upload_condo_game(map_arg))
+        return f"https://www.roblox.com/games/{place_id}/{place_name.replace(' ', '-')}"
+    except Exception as e:
+        print(f"[Upload Error] {e}")
+        return None
